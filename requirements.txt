@@ -17,3 +17,4 @@ noisereduce==3.0.2
 # Utilities
 python-dotenv==1.0.0
 tqdm==4.66.1
+setuptools>=65.0.0

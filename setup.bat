@@ -66,6 +66,12 @@ echo Installing Python dependencies...
 echo ============================================================
 echo.
 
+:: Install setuptools first (required for Python 3.12+)
+echo Installing setuptools...
+pip install --upgrade setuptools wheel
+
+echo.
+echo Installing other dependencies...
 pip install -r requirements.txt
 
 if %errorlevel% neq 0 (
