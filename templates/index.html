@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Track Masterer - Professional Audio Mastering</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo">
+                <svg class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <path d="M12 6v6l4 2"/>
+                </svg>
+                <h1>AI Track Masterer</h1>
+            </div>
+            <p class="tagline">Professional Audio Mastering Powered by AI</p>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Upload Section -->
+            <section class="upload-section">
+                <div class="upload-zone" id="uploadZone">
+                    <div class="upload-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="17 8 12 3 7 8"/>
+                            <line x1="12" y1="3" x2="12" y2="15"/>
+                        </svg>
+                    </div>
+                    <h2>Drop your audio files here</h2>
+                    <p>or click to browse</p>
+                    <p class="supported-formats">Supports: MP3, WAV, FLAC, OGG, AIFF, M4A, WMA</p>
+                    <input type="file" id="fileInput" accept=".mp3,.wav,.flac,.ogg,.aiff,.m4a,.wma" multiple hidden>
+                </div>
+
+                <!-- File List -->
+                <div class="file-list" id="fileList" style="display: none;">
+                    <h3>Selected Files</h3>
+                    <div id="filesContainer"></div>
+                    <button class="btn btn-secondary" id="clearFiles">Clear All</button>
+                </div>
+            </section>
+
+            <!-- Settings Section -->
+            <section class="settings-section">
+                <h2>Mastering Settings</h2>
+
+                <!-- Preset Selection -->
+                <div class="setting-group">
+                    <label>Mastering Preset</label>
+                    <div class="preset-grid" id="presetGrid">
+                        {% for key, preset in presets.items() %}
+                        <div class="preset-card" data-preset="{{ key }}">
+                            <h4>{{ preset.name }}</h4>
+                            <p>{{ preset.description }}</p>
+                            <span class="preset-lufs">{{ preset.target_lufs }} LUFS</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- Output Format -->
+                <div class="setting-group">
+                    <label>Output Format</label>
+                    <div class="format-options" id="formatOptions">
+                        {% for key, format in formats.items() %}
+                        <button class="format-btn" data-format="{{ key }}">{{ format.description }}</button>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- Advanced Options -->
+                <div class="setting-group">
+                    <div class="toggle-header" id="advancedToggle">
+                        <span>Advanced Options</span>
+                        <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="6 9 12 15 18 9"/>
+                        </svg>
+                    </div>
+                    <div class="advanced-options" id="advancedOptions" style="display: none;">
+                        <!-- Noise Reduction -->
+                        <div class="option-row">
+                            <label class="toggle-label">
+                                <input type="checkbox" id="noiseReduction">
+                                <span class="toggle-switch"></span>
+                                <span>Noise Reduction</span>
+                            </label>
+                        </div>
+                        <div class="option-row" id="noiseStrengthRow" style="display: none;">
+                            <label>Noise Reduction Strength</label>
+                            <input type="range" id="noiseStrength" min="0.1" max="1" step="0.1" value="0.3">
+                            <span id="noiseStrengthValue">0.3</span>
+                        </div>
+
+                        <!-- Output Folder -->
+                        <div class="option-row">
+                            <label>Output Folder (optional)</label>
+                            <input type="text" id="outputFolder" placeholder="Leave empty for default output folder">
+                            <small>Enter full path to save mastered files to a specific location</small>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Master Button -->
+                <button class="btn btn-primary btn-large" id="masterBtn" disabled>
+                    <span class="btn-text">Start Mastering</span>
+                    <span class="btn-loading" style="display: none;">
+                        <svg class="spinner" viewBox="0 0 24 24">
+                            <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="3"/>
+                        </svg>
+                        Processing...
+                    </span>
+                </button>
+            </section>
+
+            <!-- Progress Section -->
+            <section class="progress-section" id="progressSection" style="display: none;">
+                <h2>Processing</h2>
+                <div class="progress-container">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                    <p class="progress-text" id="progressText">Preparing...</p>
+                </div>
+                <div class="processing-log" id="processingLog"></div>
+            </section>
+
+            <!-- Results Section -->
+            <section class="results-section" id="resultsSection" style="display: none;">
+                <h2>Mastering Complete</h2>
+                <div class="results-container" id="resultsContainer"></div>
+            </section>
+
+            <!-- Analysis Section -->
+            <section class="analysis-section" id="analysisSection" style="display: none;">
+                <h2>Audio Analysis</h2>
+                <div class="analysis-grid" id="analysisGrid"></div>
+            </section>
+        </main>
+
+        <!-- Output Files Panel -->
+        <aside class="output-panel">
+            <h3>Mastered Files</h3>
+            <div class="output-files" id="outputFiles">
+                <p class="empty-message">No mastered files yet</p>
+            </div>
+            <button class="btn btn-secondary btn-small" id="refreshFiles">Refresh List</button>
+        </aside>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>&copy; 2024 AI Track Masterer. All rights reserved.</p>
+        </footer>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
