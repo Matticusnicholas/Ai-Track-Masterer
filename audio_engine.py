@@ -22,6 +22,17 @@ class AudioAnalyzer:
         self.sr = sample_rate
         self.meter = pyln.Meter(sample_rate)
 
+    @staticmethod
+    def _safe_float(value, default=0.0):
+        """Convert value to JSON-safe float (handles NaN/Inf)"""
+        if isinstance(value, (np.floating, np.integer)):
+            value = float(value)
+        if not isinstance(value, (int, float)):
+            return default
+        if np.isnan(value) or np.isinf(value):
+            return default
+        return value
+
     def get_loudness(self) -> float:
         """Get integrated loudness in LUFS"""
         if self.audio.ndim == 1:
@@ -29,14 +40,16 @@ class AudioAnalyzer:
         else:
             audio_for_meter = self.audio.T
         try:
-            return self.meter.integrated_loudness(audio_for_meter)
+            result = self.meter.integrated_loudness(audio_for_meter)
+            return self._safe_float(result, -24.0)
         except:
             return -24.0  # Default fallback
 
     def get_peak(self) -> float:
         """Get true peak in dB"""
         peak = np.max(np.abs(self.audio))
-        return 20 * np.log10(peak + 1e-10)
+        result = 20 * np.log10(peak + 1e-10)
+        return self._safe_float(result, -60.0)
 
     def get_dynamic_range(self) -> float:
         """Calculate dynamic range in dB"""
@@ -61,7 +74,8 @@ class AudioAnalyzer:
 
         rms_values = np.array(rms_values)
         # Dynamic range is difference between loud and quiet sections
-        return np.percentile(rms_values, 95) - np.percentile(rms_values, 10)
+        result = np.percentile(rms_values, 95) - np.percentile(rms_values, 10)
+        return self._safe_float(result, 10.0)
 
     def get_spectral_balance(self) -> Dict[str, float]:
         """Analyze frequency balance"""
@@ -85,13 +99,13 @@ class AudioAnalyzer:
         total = band_energy(20, 20000) + 1e-10
 
         return {
-            'sub_bass': band_energy(20, 60) / total,      # 20-60 Hz
-            'bass': band_energy(60, 250) / total,         # 60-250 Hz
-            'low_mid': band_energy(250, 500) / total,     # 250-500 Hz
-            'mid': band_energy(500, 2000) / total,        # 500-2000 Hz
-            'high_mid': band_energy(2000, 4000) / total,  # 2-4 kHz
-            'presence': band_energy(4000, 6000) / total,  # 4-6 kHz
-            'brilliance': band_energy(6000, 20000) / total # 6-20 kHz
+            'sub_bass': self._safe_float(band_energy(20, 60) / total, 0.1),
+            'bass': self._safe_float(band_energy(60, 250) / total, 0.15),
+            'low_mid': self._safe_float(band_energy(250, 500) / total, 0.15),
+            'mid': self._safe_float(band_energy(500, 2000) / total, 0.2),
+            'high_mid': self._safe_float(band_energy(2000, 4000) / total, 0.15),
+            'presence': self._safe_float(band_energy(4000, 6000) / total, 0.1),
+            'brilliance': self._safe_float(band_energy(6000, 20000) / total, 0.15)
         }
 
     def get_stereo_width(self) -> float:
@@ -111,19 +125,21 @@ class AudioAnalyzer:
         if mid_energy < 1e-10:
             return 0.0
 
-        return np.clip(side_energy / (mid_energy + side_energy), 0, 1)
+        result = np.clip(side_energy / (mid_energy + side_energy), 0, 1)
+        return self._safe_float(result, 0.5)
 
     def full_analysis(self) -> Dict[str, Any]:
         """Perform complete audio analysis"""
+        duration = len(self.audio[0] if self.audio.ndim > 1 else self.audio) / self.sr
         return {
             'loudness_lufs': self.get_loudness(),
             'peak_db': self.get_peak(),
             'dynamic_range_db': self.get_dynamic_range(),
             'spectral_balance': self.get_spectral_balance(),
             'stereo_width': self.get_stereo_width(),
-            'sample_rate': self.sr,
-            'duration_seconds': len(self.audio[0] if self.audio.ndim > 1 else self.audio) / self.sr,
-            'channels': self.audio.shape[0] if self.audio.ndim > 1 else 1
+            'sample_rate': int(self.sr),
+            'duration_seconds': self._safe_float(duration, 0.0),
+            'channels': int(self.audio.shape[0] if self.audio.ndim > 1 else 1)
         }
 
 
