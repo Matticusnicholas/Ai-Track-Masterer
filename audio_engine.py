@@ -426,7 +426,8 @@ class AIMasterer:
             'processing_steps': []
         }
 
-        result = audio.copy()
+        # Sanitize input audio to prevent NaN/infinite errors
+        result = self._sanitize(audio.copy())
 
         # Step 1: Noise reduction (if enabled)
         if noise_reduction:
@@ -490,16 +491,51 @@ class AIMasterer:
         result = AudioProcessor.soft_clip(result, ceiling_db=-0.3)
         report['processing_steps'].append('Final limiting applied (-0.3 dB ceiling)')
 
+        # Final sanitization to ensure clean output
+        result = self._sanitize(result)
+
         # Final analysis
         final_analyzer = AudioAnalyzer(result, sr)
         report['final_analysis'] = final_analyzer.full_analysis()
 
         return result, report
 
+    @staticmethod
+    def _sanitize(audio: np.ndarray) -> np.ndarray:
+        """Sanitize audio to remove NaN/infinite values"""
+        audio = np.nan_to_num(audio, nan=0.0, posinf=0.99, neginf=-0.99)
+        audio = np.clip(audio, -1.0, 1.0)
+        if not np.all(np.isfinite(audio)):
+            audio = np.where(np.isfinite(audio), audio, 0.0)
+        return audio
+
+
+def sanitize_audio(audio: np.ndarray) -> np.ndarray:
+    """
+    Sanitize audio array by removing NaN and infinite values.
+    This fixes 'Audio buffer is not finite everywhere' errors.
+    """
+    # Replace NaN with 0
+    audio = np.nan_to_num(audio, nan=0.0, posinf=0.99, neginf=-0.99)
+
+    # Clip to valid range
+    audio = np.clip(audio, -1.0, 1.0)
+
+    # Ensure finite
+    if not np.all(np.isfinite(audio)):
+        # If still not finite, replace remaining issues
+        audio = np.where(np.isfinite(audio), audio, 0.0)
+
+    return audio
+
 
 def load_audio(file_path: str) -> Tuple[np.ndarray, int]:
     """Load audio file and return as numpy array"""
     audio, sr = librosa.load(file_path, sr=None, mono=False)
+
+    # Sanitize audio to fix NaN/infinite values
+    audio = sanitize_audio(audio)
+
     return audio, sr
 
 
