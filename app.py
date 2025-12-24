@@ -6,10 +6,12 @@ Professional audio mastering powered by AI algorithms
 import os
 import uuid
 import shutil
+import math
 from datetime import datetime
 from flask import Flask, request, jsonify, send_file, render_template, send_from_directory
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
+import numpy as np
 
 import config
 from audio_engine import AIMasterer, load_audio, save_audio, AudioAnalyzer
@@ -20,6 +22,39 @@ CORS(app)
 app.config['UPLOAD_FOLDER'] = config.UPLOAD_FOLDER
 app.config['OUTPUT_FOLDER'] = config.OUTPUT_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500MB max file size
+
+
+def sanitize_for_json(obj):
+    """
+    Recursively sanitize an object to ensure it's JSON serializable.
+    Handles NaN, Infinity, numpy types, and nested structures.
+    """
+    if obj is None:
+        return None
+    elif isinstance(obj, dict):
+        return {k: sanitize_for_json(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [sanitize_for_json(item) for item in obj]
+    elif isinstance(obj, (np.integer, np.int64, np.int32)):
+        return int(obj)
+    elif isinstance(obj, (np.floating, np.float64, np.float32)):
+        if np.isnan(obj) or np.isinf(obj):
+            return 0.0
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return sanitize_for_json(obj.tolist())
+    elif isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return 0.0
+        return obj
+    elif isinstance(obj, (int, str, bool)):
+        return obj
+    else:
+        # Try to convert to string as fallback
+        try:
+            return str(obj)
+        except:
+            return None
 
 
 def allowed_file(filename: str) -> bool:
@@ -86,7 +121,8 @@ def analyze_audio():
         analysis['file_size_mb'] = os.path.getsize(temp_path) / (1024 * 1024)
         analysis['temp_id'] = unique_id
 
-        return jsonify(analysis)
+        # Sanitize for JSON serialization
+        return jsonify(sanitize_for_json(analysis))
 
     except Exception as e:
         if os.path.exists(temp_path):
@@ -158,7 +194,8 @@ def master_audio():
         # Get final file info
         final_size = os.path.getsize(final_path) / (1024 * 1024)
 
-        return jsonify({
+        # Build response and sanitize for JSON
+        response = {
             'success': True,
             'output_path': final_path,
             'output_filename': os.path.basename(final_path),
@@ -167,7 +204,8 @@ def master_audio():
             'format': output_format,
             'report': report,
             'download_url': f'/api/download/{os.path.basename(final_path)}'
-        })
+        }
+        return jsonify(sanitize_for_json(response))
 
     except Exception as e:
         if os.path.exists(temp_path):
@@ -264,12 +302,13 @@ def batch_master():
             })
 
     successful = sum(1 for r in results if r.get('success'))
-    return jsonify({
+    response = {
         'total': len(results),
         'successful': successful,
         'failed': len(results) - successful,
         'results': results
-    })
+    }
+    return jsonify(sanitize_for_json(response))
 
 
 @app.route('/api/list-output', methods=['GET'])
