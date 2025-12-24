@@ -190,22 +190,26 @@ class AudioProcessor:
             (6000, 20000)  # High
         ]
 
-        # Process each channel
-        if audio.ndim == 1:
-            return AudioProcessor._compress_bands(audio, sr, bands, ratio, threshold_db)
-        else:
-            result = np.zeros_like(audio)
-            for ch in range(audio.shape[0]):
-                result[ch] = AudioProcessor._compress_bands(
-                    audio[ch], sr, bands, ratio, threshold_db
-                )
-            return result
+        try:
+            # Process each channel
+            if audio.ndim == 1:
+                return AudioProcessor._compress_bands(audio, sr, bands, ratio, threshold_db)
+            else:
+                result = audio.copy()  # Start with copy of original
+                for ch in range(audio.shape[0]):
+                    result[ch] = AudioProcessor._compress_bands(
+                        audio[ch], sr, bands, ratio, threshold_db
+                    )
+                return result
+        except:
+            return audio  # Return original on any error
 
     @staticmethod
     def _compress_bands(mono: np.ndarray, sr: int, bands: list,
                        ratio: float, threshold_db: float) -> np.ndarray:
         """Compress individual frequency bands"""
         result = np.zeros_like(mono)
+        bands_processed = 0
 
         for low, high in bands:
             # Design bandpass filter
@@ -223,13 +227,23 @@ class AudioProcessor:
                 # Apply compression
                 compressed = AudioProcessor._compress(band_signal, ratio, threshold_db)
                 result += compressed
+                bands_processed += 1
             except:
                 continue
 
-        # Normalize to prevent clipping
-        peak = np.max(np.abs(result))
-        if peak > 0:
-            result = result / peak * np.max(np.abs(mono))
+        # If no bands were processed, return original audio
+        if bands_processed == 0:
+            return mono
+
+        # Normalize to match original level
+        result_peak = np.max(np.abs(result))
+        mono_peak = np.max(np.abs(mono))
+
+        if result_peak > 0 and mono_peak > 0:
+            result = result / result_peak * mono_peak
+        elif result_peak == 0:
+            # Fallback: return original if result is silent
+            return mono
 
         return result
 
@@ -260,13 +274,16 @@ class AudioProcessor:
     @staticmethod
     def enhance_clarity(audio: np.ndarray, sr: int, amount: float = 0.3) -> np.ndarray:
         """Enhance presence and clarity in the mix"""
-        if audio.ndim == 1:
-            return AudioProcessor._enhance_clarity_mono(audio, sr, amount)
-        else:
-            result = np.zeros_like(audio)
-            for ch in range(audio.shape[0]):
-                result[ch] = AudioProcessor._enhance_clarity_mono(audio[ch], sr, amount)
-            return result
+        try:
+            if audio.ndim == 1:
+                return AudioProcessor._enhance_clarity_mono(audio, sr, amount)
+            else:
+                result = audio.copy()  # Start with copy of original
+                for ch in range(audio.shape[0]):
+                    result[ch] = AudioProcessor._enhance_clarity_mono(audio[ch], sr, amount)
+                return result
+        except:
+            return audio  # Return original on any error
 
     @staticmethod
     def _enhance_clarity_mono(mono: np.ndarray, sr: int, amount: float) -> np.ndarray:
@@ -363,24 +380,30 @@ class AudioProcessor:
     @staticmethod
     def reduce_noise(audio: np.ndarray, sr: int, strength: float = 0.5) -> np.ndarray:
         """Reduce background noise"""
-        if audio.ndim == 1:
-            return nr.reduce_noise(y=audio, sr=sr, prop_decrease=strength)
-        else:
-            result = np.zeros_like(audio)
-            for ch in range(audio.shape[0]):
-                result[ch] = nr.reduce_noise(y=audio[ch], sr=sr, prop_decrease=strength)
-            return result
+        try:
+            if audio.ndim == 1:
+                return nr.reduce_noise(y=audio, sr=sr, prop_decrease=strength)
+            else:
+                result = audio.copy()  # Start with copy of original
+                for ch in range(audio.shape[0]):
+                    result[ch] = nr.reduce_noise(y=audio[ch], sr=sr, prop_decrease=strength)
+                return result
+        except:
+            return audio  # Return original on any error
 
     @staticmethod
     def harmonic_exciter(audio: np.ndarray, sr: int, amount: float = 0.1) -> np.ndarray:
         """Add harmonic excitement for more presence"""
-        if audio.ndim == 1:
-            return AudioProcessor._excite_harmonics(audio, sr, amount)
-        else:
-            result = np.zeros_like(audio)
-            for ch in range(audio.shape[0]):
-                result[ch] = AudioProcessor._excite_harmonics(audio[ch], sr, amount)
-            return result
+        try:
+            if audio.ndim == 1:
+                return AudioProcessor._excite_harmonics(audio, sr, amount)
+            else:
+                result = audio.copy()  # Start with copy of original
+                for ch in range(audio.shape[0]):
+                    result[ch] = AudioProcessor._excite_harmonics(audio[ch], sr, amount)
+                return result
+        except:
+            return audio  # Return original on any error
 
     @staticmethod
     def _excite_harmonics(mono: np.ndarray, sr: int, amount: float) -> np.ndarray:
@@ -509,6 +532,19 @@ class AIMasterer:
 
         # Final sanitization to ensure clean output
         result = self._sanitize(result)
+
+        # Safety check: ensure we didn't create silent audio
+        result_peak = np.max(np.abs(result))
+        original_peak = np.max(np.abs(audio))
+
+        if result_peak < 0.001 and original_peak > 0.001:
+            # Result is essentially silent but original wasn't - fall back to normalized original
+            report['processing_steps'].append('WARNING: Processing produced silent output, using normalized original')
+            result = audio.copy()
+            # Just normalize the original
+            result = AudioProcessor.normalize_loudness(result, sr, self.current_preset['target_lufs'])
+            result = AudioProcessor.soft_clip(result, ceiling_db=-0.3)
+            result = self._sanitize(result)
 
         # Final analysis
         final_analyzer = AudioAnalyzer(result, sr)
